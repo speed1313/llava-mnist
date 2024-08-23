@@ -15,18 +15,19 @@ In this example, we use the following models for each components:
 - Vision Encoder: one linear layer (Optimized for MNIST dataset), that takes a 28x28 image and outputs a 4096-dimensional embedding.
 - Language Model: meta-llama/Meta-Llama-3.1-8B-Instruct (Frozen)
 
-## Loss Function
-The loss function is defined as follows:
-
-$L(W)=-\log P_W(\text{This digit is \{label\}}|\text{<image>What digit is this?})$
-
-where $W$ is the vision encoder model's parameters, $P_W$ is the model's prediction, and $label$ is the ground truth label of the image.
 
 ## Dataset
 We use the *chat-style* MNIST dataset that is defined as follows:
 - prompt: “<image>What digit is this?”
 
 - output: "The digit is {label}."
+
+## Loss Function
+The loss function is defined as follows:
+
+$L(W)=-\log P_W(\text{This digit is \{label\}}|\text{<image>What digit is this?})$
+
+where $W$ is the vision encoder model's parameters, $P_W$ is the model's prediction, and $label$ is the ground truth label of the image.
 
 
 ## How to use
