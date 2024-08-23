@@ -1,5 +1,4 @@
 from transformers import PretrainedConfig
-from typing import List
 
 
 class MLPConfig(PretrainedConfig):

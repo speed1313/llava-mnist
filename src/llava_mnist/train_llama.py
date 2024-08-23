@@ -1,13 +1,13 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 from datasets import load_dataset
-import torch
 from configuration_mlp import MLPConfig
 from modeling_mlp import MLP
-from torchvision import datasets, transforms
-import matplotlib.pyplot as plt
+from torchvision import transforms
 from tqdm import tqdm
 import util
+import wandb
+
 
 model_id = "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
@@ -46,11 +46,13 @@ def transforms(examples):
     return examples
 
 
-ds = ds.select(range(1000))
+train_num = 1000
+ds = ds.select(range(train_num))
 
 ds.set_transform(transforms)
 
-vision_model = MLP(MLPConfig())
+mlp_config = MLPConfig()
+vision_model = MLP(mlp_config)
 
 # training loop
 vision_model.train()
@@ -58,14 +60,16 @@ model.eval()
 
 optimizer = torch.optim.AdamW(vision_model.parameters(), lr=1e-3)
 
+wandb.init(project="llava-mnist")
 
-for i in tqdm(range(1000)):
+
+for i, example in tqdm(enumerate(ds)):
     optimizer.zero_grad()
-    answer_text = f"The digit is {ds[i]['label']}.<|eot_id|>"
+    answer_text = f"The digit is {example['label']}.<|eot_id|>"
     answer = tokenizer(answer_text, return_tensors="pt")
     true_answer_input_ids = answer["input_ids"]
     input_embeded = util.build_multi_modal_prompt(
-        prompt, ds[i]["pixel_values"].unsqueeze(0), tokenizer, model, vision_model
+        prompt, example["pixel_values"].unsqueeze(0), tokenizer, model, vision_model
     ).unsqueeze(0)
     output_embeded = model.get_input_embeddings()(answer["input_ids"])
     input_embeded = torch.cat([input_embeded, output_embeded], dim=1)
@@ -82,15 +86,32 @@ for i in tqdm(range(1000)):
     if i % 100 == 0:
         print(loss.item())
         print("true answer:", answer_text)
-        print(
-            tokenizer.decode(
-                torch.argmax(outputs.logits, dim=-1)[0], skip_special_tokens=True
-            )
+        # generate response
+        response = model.generate(
+            inputs_embeds=input_embeded[:, :-answer_length],
+            max_new_tokens=20,
+            eos_token_id=terminators,
+            do_sample=True,
+            temperature=0.6,
+            top_p=0.9,
+        )
+        response_text = tokenizer.decode(response[0], skip_special_tokens=True)
+        print("response:", response_text)
+        # wandb HTML logging
+        wandb.log(
+            {
+                "iter": i,
+                "train/loss": loss.item(),
+                "Generated Text": wandb.Html(
+                    "<p>Ground truth: "
+                    + answer_text
+                    + "</p><p>Response: "
+                    + response_text
+                    + "</p>"
+                ),
+            }
         )
 
 
 vision_model.push_to_hub("llava-mnist", private=True)
-# TODO: check llm's parameters do not change
-
-
-# TODO: check the image's embedding and digit's embedding
+mlp_config.push_to_hub("llava-mnist", private=True)
